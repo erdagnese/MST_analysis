@@ -100,16 +100,7 @@ make a tree to see where different phylum are present
 ```{r}
 plot_tree(Pps, color = "sampletype", label.tips = "Phylum", ladderize = "left", justify = "left" , size = "Abundance")
 ```
-
-
-Need to remove the chloroplast reads as they aren't real bacteria reads
-```{r}
-
-#didn't work
-chloro = 
-```
-
-Let's see if that worked to remove the mitochondria and the chloroplasts
+relative abundance plots by phylum to look at breakdowns from raw reads
 ```{r}
 Pps<- tax_glom(phylo, "Phylum")
 Pps0<- transform_sample_counts(Pps, function(x) x/ sum(x))
@@ -127,26 +118,7 @@ plot a network just to see if there are connections between sites/reps
 plot_net(phylo, distance = "bray", maxdist=0.6, color="biosample", shape="sampletype")
 ```
 
-let's reordinate now that we have removed the archea and the chloroplast
-```{r}
-ord <- ordinate(phylo, "PCoA","bray")
-p = plot_ordination(phylo, ord, type="samples", color="location", shape="sampletype")
-p + geom_point(size=4) +ggtitle("Bray-Curtis PCoA plot of samples by location and type - pruned taxa")
-ggsave("B-C_plot_sampletype_prunedtaxa.png", width = 8, height = 6)
-##nothing changed
-```
 
-
-need to look at the break down of a few different phyla to see how they differ across sample types
-```{r}
-#Proteobacteria
-prot= subset
-
-#Bacteroidota
-
-
-#Actinobacteria
-```
 
 For the ordination based on eDNA index
 1. remove rare reads and chloroplast/mitochondria
