@@ -1,0 +1,276 @@
+---
+title: "MST_qiime2-R"
+author: "Erin D'Agnese"
+date: "9/22/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r load packages for importing data}
+library(here)
+library(tidyverse)
+if (!requireNamespace("devtools", quietly = TRUE)){install.packages("devtools")}
+devtools::install_github("jbisanz/qiime2R")
+library(qiime2R)
+library(ggplot2)
+theme_set(theme_bw())
+```
+
+import the qiime artifacts needed
+```{r import data from qiime outputs}
+setwd("C:/Users/erdag/MST_SJI/qiime_outputs")
+metadata <- read_q2metadata(here("qiime_outputs","trimmed","mst-sji-metadata.tsv"))
+asv.table <- read_qza(here("qiime_outputs","trimmed","table2.qza"))
+taxonomy <- read_qza(here("qiime_outputs","trimmed","MST-SILVA-taxonomy.qza"))
+taxtable<-taxonomy$data %>% as_tibble() %>% separate(Taxon, sep=";", c("Kingdom","Phylum","Class","Order","Family","Genus","Species")) #convert the table into a tabular split version
+tree <- read_qza(here("qiime_outputs", "trimmed", "rooted-tree2.qza"))
+```
+
+Make a phyloseq object out of the qiime outputs
+```{r make a phyloseq object}
+library(phyloseq)
+OTU = otu_table(asv.table$data, taxa_are_rows = T)
+TAX = tax_table(as.data.frame(taxtable)%>% column_to_rownames("Feature.ID")%>% as.matrix("Taxon"))
+TREE = phy_tree(tree$data)
+SAMPLES = sample_data(metadata %>% as.data.frame() %>% column_to_rownames("SampleID"))
+phylo = phyloseq(OTU,TAX,TREE,SAMPLES)
+```
+
+check if it worked by plotting a bar of tax
+```{r bar plot check}
+plot_bar(phylo, fill = "Phylum")
+```
+well it appears to have worked now let's get some other plots made to explore the data
+heatmap
+```{r heatmap 1}
+plot_heatmap(phylo)
+```
+let's make an ordination plot
+```{r}
+ord <- ordinate(phylo, "PCoA","bray")
+p = plot_ordination(phylo, ord, type="samples", color="location", shape="sampletype")
+p + geom_point(size=4) +ggtitle("Bray-Curtis PCoA plot of samples by location and type")
+ggsave("B-C_plot_sampletype.png", width = 8, height = 6)
+```
+
+pull out only bacteria
+```{r remove the archea}
+phylo <- subset_taxa(phylo, Kingdom=="d__Bacteria")
+plot_bar(phylo, fill = "Phylum")
+ggsave("bar_plot_phylum.png", width = 16, height = 10)
+```
+
+
+```{r richness}
+plot_richness(phylo, color="location", measures=c("Observed"))
+ggsave("richness_observed_asvs.png", width = 8, height = 6)
+```
+create object where samples are merged by the replicates
+```{r merge samples from bio reps}
+phy_reps <- merge_samples(phylo, "biosample")
+```
+
+let's make a heatmap with the merged samples
+```{r  heatmap merged}
+plot_heatmap(phy_reps)
+```
+
+let's make a stacked relative abundance plot
+```{r}
+Pps<- tax_glom(phylo, "Phylum")
+Pps0<- transform_sample_counts(Pps, function(x) x/ sum(x))
+Pps1<- merge_samples(phylo, "biosample")
+Pps2<- transform_sample_counts(Pps1, function(x) x/ sum(x))
+plot_bar(Pps2, fill = "Phylum")+
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")+
+  theme_bw()+theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
+ggsave("relabundace_biosample_plot_phylum.png", width = 16, height = 10)
+```
+
+make a tree to see where different phylum are present
+```{r}
+plot_tree(Pps, color = "sampletype", label.tips = "Phylum", ladderize = "left", justify = "left" , size = "Abundance")
+```
+
+
+Need to remove the chloroplast reads as they aren't real bacteria reads
+```{r}
+
+#didn't work
+chloro = 
+```
+
+Let's see if that worked to remove the mitochondria and the chloroplasts
+```{r}
+Pps<- tax_glom(phylo, "Phylum")
+Pps0<- transform_sample_counts(Pps, function(x) x/ sum(x))
+Pps1<- merge_samples(phylo, "biosample")
+Pps2<- transform_sample_counts(Pps1, function(x) x/ sum(x))
+plot_bar(Pps2, fill = "Phylum")+
+  geom_bar(aes(color=Phylum, fill=Phylum), stat="identity", position="stack")+
+  theme_bw()+theme(panel.grid.major=element_blank(), panel.grid.minor=element_blank())
+ggsave("relabundace_biosample_plot_phylum_nochloro.png", width = 16, height = 10)
+```
+
+
+plot a network just to see if there are connections between sites/reps
+```{r}
+plot_net(phylo, distance = "bray", maxdist=0.6, color="biosample", shape="sampletype")
+```
+
+let's reordinate now that we have removed the archea and the chloroplast
+```{r}
+ord <- ordinate(phylo, "PCoA","bray")
+p = plot_ordination(phylo, ord, type="samples", color="location", shape="sampletype")
+p + geom_point(size=4) +ggtitle("Bray-Curtis PCoA plot of samples by location and type - pruned taxa")
+ggsave("B-C_plot_sampletype_prunedtaxa.png", width = 8, height = 6)
+##nothing changed
+```
+
+
+need to look at the break down of a few different phyla to see how they differ across sample types
+```{r}
+#Proteobacteria
+prot= subset
+
+#Bacteroidota
+
+
+#Actinobacteria
+```
+
+For the ordination based on eDNA index
+1. remove rare reads and chloroplast/mitochondria
+2. eDNA index for each ASV
+3. PCoA of eDNA index
+4. CAPScale analysis 
+
+
+
+1.remove rare reads
+```{r remove rare reads}
+#remove reads that are not seen more than 4 times in at least 15% of samples
+phy1 = filter_taxa(phylo, function(x) sum(x > 4) > (0.15*length(x)), TRUE)
+#look at a plot of the reads left
+plot_bar(phy1, fill = "Phylum")
+```
+
+1. remove chloroplasts and mitochondria
+```{r}
+phy3 <- phy1 %>% subset_taxa( Family!= "Mitochondria" | is.na(Family) & Order!="Chloroplast" | is.na(Order) )
+tax1 = as(tax_table(phy1), "matrix")
+chloro = subset_taxa(phy1, Order==" o__Chloroplast")
+taxchl = taxa_names(chloro)
+mito = subset_taxa(phy1, Family==" f__Mitochondria")
+taxmit = taxa_names(mito)
+phy2 = prune_taxa(taxchl, phy1)
+taxphy2 = as(tax_table(phy2), "matrix")
+phy3 = prune_taxa(taxmit, phy2) 
+```
+
+
+2.use the cleaned ASV table from the phyloseq to run the eDNA index function
+```{r}
+asv1 = as(otu_table(phy1), "matrix")
+# Coerce to data.frame
+ASVdf = as.data.frame(asv1)
+remotes::install_github("https://github.com/ramongallego/eDNA_functions")
+library(eDNAfuns)
+library(tidyverse)
+nASV <- ASVdf %>% 
+  rownames_to_column("ASVid")%>%
+  pivot_longer(-ASVid, names_to="SampleID", values_to = "nReads")%>%
+  eDNAfuns::eDNAindex(Sample_column = SampleID, OTU_column = ASVid, Counts_column = nReads)%>%
+  pivot_wider(names_from = ASVid, values_from = Normalized.reads)
+```
+
+2. ordination plot of eDNA index data
+```{r}
+library(vegan)
+temp <- metadata%>%inner_join(nASV)%>%
+  select(-`barcode-sequence`,-linkerprimersequence)
+newmetadata = temp[,1:5]
+newASV = temp%>%select(!colnames(newmetadata))
+
+adonis(newASV~biosample,data=newmetadata, method="bray")
+
+ord <- vegdist(newASV, method= "bray")
+
+ord
+
+```
+
+
+capscale analysis
+```{r}  
+
+cap1 <- capscale(newASV~sampletype, data=newmetadata, distance="bray")
+
+sppscores(cap1) <- sqrt(decostand(newASV, "total"))
+str(cap1)
+
+
+capPt <- plot(cap1)
+cap2 <- cap1[["CCA"]][["wa"]] %>%
+                         as.data.frame() %>%
+                         bind_cols(newmetadata) %>% 
+   
+      ggplot(aes(x = CAP1,
+                 y = CAP2)) +
+      # ggforce::geom_mark_hull(aes( group= cluster, color = as.factor(cluster),label = as.factor(cluster), fill = as.factor(cluster)),
+      #                     expand = unit(2, "mm"),
+      #            label.margin = margin(1, 1, 1, 1, "mm"),
+      #            label.buffer = unit(0, "mm"),
+      #            con.cap = 1 ,
+      #            alpha = 0.5) +
+     
+      geom_point(size = 1.5) +
+       geom_point(aes(shape = sampletype, color = biosample), size = 3) +
+  theme_bw()
+      # geom_segment(aes(x = 0, y = 0,
+      #                  xend = CAP1,
+      #                  yend = CAP2), data = var.scores, color = "blue", arrow = arrow(length = unit(0.1,"cm"))) +
+      # geom_label_repel(aes(x= CAP1  ,
+      #                      y= CAP2 ,
+      #                      label = env.variable), data = var.scores, fill = "pink", alpha = 0.75) +
+      # ggtitle ("") + coord_equal() + scale_color_brewer(name = "Cluster", palette = "Set2") + scale_fill_brewer(name = "Cluster",palette = "Set2") +
+      # theme(legend.position = "bottom")
+cap2
+ggsave("CAP_sampletype_biosample.png", width = 8, height = 6)      
+```
+
+Aligning the ASVs found through CAP analysis to the taxa assignments 
+```{r}
+ASVvectors <- cap1[["CCA"]][["v"]] %>% as.data.frame 
+CAPorder <- ASVvectors %>% arrange(desc(CAP1)) #%>% head(50)
+CAPorder <- cbind(Feature.ID = rownames(CAPorder), CAPorder)
+rownames(CAPorder) <- NULL
+write.csv(CAPorder, "CAPanalysis_ASVvectors.csv", row.names = TRUE)
+#map on the classification of the ASVs to determine
+CAP.ASVid <- merge(CAPorder, taxtable, by=c("Feature.ID"), all.x=FALSE, all.y=TRUE)
+CAP.ASVid <- CAP.ASVid %>% arrange(desc(CAP1))
+write.csv(CAP.ASVid, "CAPanalysis_DescASVs.csv", row.names = TRUE)
+Top50 <- CAP.ASVid %>% head(50)
+write.csv(Top50, "CAPanalysis_Top50DescASVs.csv", row.names = TRUE)
+
+```
+The taxa are representatives are mostly from Actinobacteriota, Proteobacteria
+and Firmicutes. So let's subset those phyla in the phyloseq object to look at the break down of a few different phyla to see how they differ across sample types
+```{r}
+#Proteobacteria
+prot= subset_taxa()
+
+#Firmicutes
+firm = subset_taxa()
+
+#Actinobacteria
+```
